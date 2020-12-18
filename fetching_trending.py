@@ -6,17 +6,17 @@ DEVELOPER_KEY = sys.argv[1]
 
 region_code = ['US', 'GB', 'CA', 'JP', 'MX', 'ES'] # https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2
 
-
 def build_service():
     YOUTUBE_API_SERVICE_NAME = "youtube"
     YOUTUBE_API_VERSION = "v3"
     return build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION, developerKey=DEVELOPER_KEY)
 
-def get_response(region_code):
+def get_response(region_code, page_token): # need to specify which page_token it is taking. 
     youtube = build_service()
     search_response = youtube.videos().list(
         part="snippet,statistics",
         chart="mostPopular",
+        pageToken=page_token,
         regionCode=region_code,
         maxResults=50
     ).execute()
@@ -33,6 +33,7 @@ def get_video_data(response):
                     'title': vid['snippet']['title'],
                     'channel_id': vid['snippet']['channelId'],
                     'description': vid['snippet']['description'],
+                    'category_id': vid['snippet']['categoryId'],
                     'view_count': vid['statistics']['viewCount'],
                     'trending': 1 # 1 is trending; 0 is not trending.
                     }
@@ -61,8 +62,20 @@ def get_video_data(response):
     return vid_compile
 
 
+def get_full_list(country, page_token=''):  # we need to fetch all pages to get all videos, default '' is the first page
+    video_full_list = []
+    while page_token is not None:
+        response = get_response(country, page_token)
+        video_full_list.append(get_video_data(response))
+
+        next_page_token = response.get('nextPageToken', None) # find next page token, if last page, return none.
+        page_token = next_page_token
+
+    return [video for page in video_full_list for video in page]    # from a list of pages of videos to just a list of videos
+
+
 if __name__ == '__main__':
     for country in region_code:
-        response = get_response(country)
-        df = pd.DataFrame(get_video_data(response))
-        df.to_csv(f'data_export/{country}.csv')
+        country_data = get_full_list(country)
+        df = pd.DataFrame(country_data)     # converting it to df to export as sample data. 
+        df.to_csv(f'data_export/{country}_trending.csv')
